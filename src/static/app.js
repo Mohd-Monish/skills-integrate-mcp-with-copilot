@@ -5,47 +5,95 @@ document.addEventListener("DOMContentLoaded", () => {
   const messageDiv = document.getElementById("message");
 
   // Function to fetch activities from API
-  async function fetchActivities() {
-    try {
-      const response = await fetch("/activities");
-      const activities = await response.json();
+    let allActivities = {};
 
-      // Clear loading message
+    async function fetchActivities() {
+      try {
+        const response = await fetch("/activities");
+        allActivities = await response.json();
+        renderActivities();
+      } catch (error) {
+        activitiesList.innerHTML =
+          "<p>Failed to load activities. Please try again later.</p>";
+        console.error("Error fetching activities:", error);
+      }
+    }
+
+    function getCategory(name) {
+      if (name.includes("Club")) return "Club";
+      if (name.includes("Team")) return "Team";
+      if (name.includes("Class")) return "Class";
+      return "Other";
+    }
+
+    function getTime(details) {
+      // Extract first time from schedule string
+      const match = details.schedule.match(/(\d{1,2}:\d{2} [AP]M)/);
+      return match ? match[0] : "";
+    }
+
+    function renderActivities() {
+      // Get filter values
+      const category = document.getElementById("category-filter").value;
+      const sortBy = document.getElementById("sort-filter").value;
+      const search = document.getElementById("search-filter").value.toLowerCase();
+
       activitiesList.innerHTML = "";
+      activitySelect.innerHTML = "";
+      const optionDefault = document.createElement("option");
+      optionDefault.value = "";
+      optionDefault.textContent = "-- Select an activity --";
+      activitySelect.appendChild(optionDefault);
 
-      // Populate activities list
-      Object.entries(activities).forEach(([name, details]) => {
+      let filtered = Object.entries(allActivities)
+        .filter(([name, details]) => {
+          // Category filter
+          if (category && getCategory(name) !== category) return false;
+          // Search filter
+          if (
+            search &&
+            !name.toLowerCase().includes(search) &&
+            !details.description.toLowerCase().includes(search)
+          )
+            return false;
+          return true;
+        });
+
+      // Sort
+      if (sortBy === "name") {
+        filtered.sort((a, b) => a[0].localeCompare(b[0]));
+      } else if (sortBy === "time") {
+        filtered.sort((a, b) => getTime(a[1]).localeCompare(getTime(b[1])));
+      }
+
+      filtered.forEach(([name, details]) => {
         const activityCard = document.createElement("div");
         activityCard.className = "activity-card";
-
-        const spotsLeft =
-          details.max_participants - details.participants.length;
-
-        // Create participants HTML with delete icons instead of bullet points
+        const spotsLeft = details.max_participants - details.participants.length;
         const participantsHTML =
           details.participants.length > 0
             ? `<div class="participants-section">
-              <h5>Participants:</h5>
-              <ul class="participants-list">
-                ${details.participants
-                  .map(
-                    (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
-                  )
-                  .join("")}
-              </ul>
-            </div>`
+                <h5>Participants:</h5>
+                <ul class="participants-list">
+                  ${details.participants
+                    .map(
+                      (email) =>
+                        `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                    )
+                    .join("")}
+                </ul>
+              </div>`
             : `<p><em>No participants yet</em></p>`;
 
         activityCard.innerHTML = `
-          <h4>${name}</h4>
-          <p>${details.description}</p>
-          <p><strong>Schedule:</strong> ${details.schedule}</p>
-          <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
-          <div class="participants-container">
-            ${participantsHTML}
-          </div>
-        `;
+            <h4>${name}</h4>
+            <p>${details.description}</p>
+            <p><strong>Schedule:</strong> ${details.schedule}</p>
+            <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+            <div class="participants-container">
+              ${participantsHTML}
+            </div>
+          `;
 
         activitiesList.appendChild(activityCard);
 
@@ -60,12 +108,12 @@ document.addEventListener("DOMContentLoaded", () => {
       document.querySelectorAll(".delete-btn").forEach((button) => {
         button.addEventListener("click", handleUnregister);
       });
-    } catch (error) {
-      activitiesList.innerHTML =
-        "<p>Failed to load activities. Please try again later.</p>";
-      console.error("Error fetching activities:", error);
     }
-  }
+
+    // Add filter listeners
+    document.getElementById("category-filter").addEventListener("change", renderActivities);
+    document.getElementById("sort-filter").addEventListener("change", renderActivities);
+    document.getElementById("search-filter").addEventListener("input", renderActivities);
 
   // Handle unregister functionality
   async function handleUnregister(event) {
